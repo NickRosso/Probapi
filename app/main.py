@@ -1,7 +1,8 @@
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, UploadFile
 from fastapi import __version__ as fastapi_version
 from .utils import validate_and_probe_subnet, build_request_headers
 from dotenv import load_dotenv
+import aiofiles
 import os
 import uvicorn
 import requests
@@ -63,6 +64,65 @@ def probe_homelab_service_health():
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"PossibleError loading homelab_services.json. File is missing or data is invalid JSON. Full trace: {e}")
     return results
+
+@app.post("/probe/update_homelab_services",
+    summary="This enpdoint accepts properly formatted JSON files to overwrite the homelab_services.json file.",
+    response_description="Status of the uploaded .json file."
+)
+async def update_homelab_services_file(file: UploadFile):
+    contents = await file.read()
+
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded file was empty.")
+    
+    if not file.filename.endswith(".json"):
+        raise HTTPException(status_code=400, detail=f"Uploaded file must have .json")
+    
+    #After checking if file ends with .json in the name now we attempt to load it.
+    try:
+        uploaded_json = json.loads(contents)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Uploaded file does not contain valid json: {e}")
+    
+    services = uploaded_json["services"]
+
+    if not isinstance(services, list):
+        raise HTTPException(status_code=400, detail="top level services key must be a list of objects.")
+        
+    #JSON keys that should exist for each service in the .json
+    required_keys = ["name", "URL", "port", "TLS", "headers"]
+
+    for service in services:
+        if not isinstance(service, dict):
+            raise HTTPException(status_code=400, detail="service must be a JSON object.")
+        for key in required_keys:
+            if key in service:
+                continue
+            else:
+                raise HTTPException(status_code=400, detail=f"missing key in uploaded service: {service} key missing: {key}")
+    
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    backup_path = f"{os.getenv("UPLOAD_DIR")}/homelab_services_backup_{timestamp}.json"
+    
+    #reads original contents
+    async with aiofiles.open(os.getenv("CONFIG_PATH"), "rb") as original:
+        existing_contents = await original.read()
+    
+    #writes a backup of the original contents
+    async with aiofiles.open(backup_path, "wb") as backup_file:
+        await backup_file.write(existing_contents)
+    #Writes a temporary file  using the uploaded documents.
+    temp_path = f"{os.getenv("UPLOAD_DIR")}/uploaded_temp_{timestamp}.json" 
+    async with aiofiles.open(temp_path, "wb") as temp_file: 
+        await temp_file.write(contents)
+    
+    #replace the existing config with the temp file.
+    os.replace(temp_path,os.getenv("CONFIG_PATH"))
+
+    return {
+        "Status": "updated", 
+        "Filename": file.filename,
+        "backup_created": backup_path}
 
 @app.get("/probe/url",
     summary="This endpoint probes the provided web app given with GET requests.",
