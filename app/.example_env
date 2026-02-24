@@ -1,3 +1,5 @@
 UDM_SE_API_KEY="Generate API Key in UDM Unifi Console"
 CONFIG_PATH = "/code/app/data/homelab_services.json"
 UPLOAD_DIR = "/code/app/data"
+ENVIRONMENT="TEST"
+OLLAMA_MODEL="mistral-nemo"

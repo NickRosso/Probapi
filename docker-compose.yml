@@ -21,3 +21,20 @@ services:
     volumes: 
       - .:/code 
     command: pytest -vv --cov=app --cov-report=html
+    
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    deploy: 
+      resources: 
+        reservations:
+          devices: 
+            - capabilities: [gpu]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+      - .:/workspace
+    restart: unless-stopped
+volumes: 
+  ollama-data:

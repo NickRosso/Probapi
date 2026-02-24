@@ -12,6 +12,7 @@ import socket
 import psutil
 import datetime
 import json
+from pathlib import Path
 
 load_dotenv() # loads those secretz
 
@@ -103,7 +104,7 @@ async def update_homelab_services_file(file: UploadFile):
     
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     backup_path = f"{os.getenv("UPLOAD_DIR")}/homelab_services_backup_{timestamp}.json"
-    
+
     #reads original contents
     async with aiofiles.open(os.getenv("CONFIG_PATH"), "rb") as original:
         existing_contents = await original.read()
@@ -167,3 +168,19 @@ def probe_subnet(
 ):
     response = validate_and_probe_subnet(subnet)
     return response
+
+if os.getenv("ENVIRONMENT") == "TEST":
+    @app.get("/coverage/review")
+    def coverage_review():
+        html_path = Path("/code/htmlcov/index.html")
+        if not html_path.exists():
+            return HTTPException(status_code=400, detail="HTML coverage file doesnt exist or the path is wrong.")
+        html = html_path.read_text()
+
+        prompt = f"Review the python html coverage report and give some advice on things to fix: {html}"
+        response = requests.post("http://ollama:11434/api/generate",
+                                 json={"model": os.getenv('OLLAMA_MODEL'), "prompt": prompt, "stream": False})
+        print(response)
+        if response.status_code != 200:
+            return HTTPException(status_code=500, detail=f" LLM error: {response.text}")
+        return {"advice": response.json().get("response")}

@@ -55,6 +55,64 @@ The subnet validation and ping logic lives in `utils.py`.
 ## Pre-reqs
 Docker installed... duh
 
+## NVIDIA CUDA Driver install for Ollama
+    Windows install inside WSL Ubuntu.
+
+    1  curl -s -L https://nvidia.github.io/nvidia-container-runtime/gpgkey | sudo apt-key add -
+    2  distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+    3  curl -s -L https://nvidia.github.io/nvidia-container-runtime/$distribution/nvidia-container-runtime.list | sudo tee /etc/apt/sources.list.d/nvidia-container-runtime.list
+    4  curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo |   sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo
+    5  export NVIDIA_CONTAINER_TOOLKIT_VERSION=1.18.2-1
+    6  sudo dnf install -y    curl
+    7  sudo apt-get update && sudo apt-get install -y --no-install-recommends    ca-certificates    curl    gnupg2
+    8  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg   && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list |     sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' |     sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    9  sudo apt-get update
+    10  export NVIDIA_CONTAINER_TOOLKIT_VERSION=1.18.2-1
+    11  sudo systemctl restart docker
+    12  nvidia-smi
+    # After CUDA Drivers are installed you should be able to see gpu information from nvidia-smi
+    Mon Feb 23 20:59:33 2026
+    +-----------------------------------------------------------------------------------------+
+    | NVIDIA-SMI 580.95.02              Driver Version: 581.42         CUDA Version: 13.0     |
+    +-----------------------------------------+------------------------+----------------------+
+    | GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+    | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+    |                                         |                        |               MIG M. |
+    |=========================================+========================+======================|
+    |   0  NVIDIA GeForce RTX 4080        On  |   00000000:01:00.0  On |                  N/A |
+    |  0%   32C    P8             19W /  320W |    5766MiB /  16376MiB |      2%      Default |
+    |                                         |                        |                  N/A |
+    +-----------------------------------------+------------------------+----------------------+
+
+    +-----------------------------------------------------------------------------------------+
+    | Processes:                                                                              |
+    |  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+    |        ID   ID                                                               Usage      |
+    |=========================================================================================|
+    |  No running processes found                                                             |
+    +-----------------------------------------------------------------------------------------+
+
+
+
+## Ollama model setup
+exec into ollama and run 
+``` ollama run mistral-nemo ```
+
+## Pytest Advice endpoint
+Messing around with sidecar containers I wanted to add a lightweight helper for testing. To use this after following the previous steps. Navigate to the endpoint /coverage/review This will make a request to Ollama using the html coverage report as part of the prompt. With a RTX 4080 it takes about 6 seconds of response time to get feedback. 
+
+ollama logs:
+ollama         | time=2026-02-24T03:10:08.823Z level=INFO source=server.go:1388 msg="llama runner started in 6.60 seconds"                                                                                             
+ollama         | time=2026-02-24T03:10:08.823Z level=INFO source=sched.go:566 msg="loaded runners" count=1
+ollama         | time=2026-02-24T03:10:08.823Z level=INFO source=server.go:1350 msg="waiting for llama runner to start responding"                                                                                     
+ollama         | time=2026-02-24T03:10:08.823Z level=INFO source=server.go:1388 msg="llama runner started in 6.60 seconds"                                                                                             
+ollama         | [GIN] 2026/02/24 - 03:10:17 | 200 | 15.218556534s |      172.18.0.4 | POST     "/api/generate"  
+
+Response:
+{
+  "advice": "Based on the provided Python HTML coverage report, here are some recommendations to improve your code's test coverage:\n\n1. **Focus on `main.py`**: This is where most of your missing statements are located (43 out of 98). Here are a few ways to approach this:\n   - Break down complex functions or methods into smaller ones with clearer responsibilities, making them easier to test.\n   - Add more tests in `test_probe.py` that cover edge cases and scenarios not currently handled by your existing tests.\n   - Consider using code coverage analysis tools like `coverage.py` to pinpoint specific lines of code that are missing tests.\n\n2. **Investigate zero-coverage files**: You have two files (`__init__.py` and `test_probe.py`) with 100% coverage, but both contain very few statements (2 and 96 respectively). This might indicate that important functionality is missing from these files or that there's an error in how coverage data was collected.\n   - Review `__init__.py` to ensure it contains all the necessary initialization logic for your application.\n   - For `test_probe.py`, consider refactoring tests into smaller, more focused functions to improve maintainability and readability.\n\n3. **Review excluded statements**: Although there are no excluded statements in this report (0 out of 232), keep an eye on this metric in future reports. Excluded statements usually indicate commented-out code or statements that were intentionally ignored from coverage analysis. Regularly reviewing these can help catch any decaying tests or unnecessary code.\n\n4. **Consistent naming and formatting**: Make sure all your files, functions, and variables follow a consistent naming convention to make your codebase easier to navigate and maintain.\n   - Consider using snake_case for function and variable names, and lowercase_with_underscores for filenames as seen in the provided report.\n\n5. **Regularly update test coverage**: Make it a habit to run coverage checks frequently (e.g., after each commit or at least once a day) to track progress and catch any new uncovered lines of code early on.\n\nHere's an example of how you can improve your test coverage for `main.py` using the `coverage` command-line tool:\n\n```bash\n# Run tests and collect coverage data\npytest --cov=app\n\n# Display the coverage report for main.py\ncoverage report -m app.main\n\n# Check specific lines of code in main.py that are missing tests\ncoverage report -l app/main.py | grep '^ 0'\n```\n\nBy following these recommendations, you'll be able to improve your test coverage and maintain a high standard of quality in your Python project."
+}
+
 ## Homelab Services
 Configure what homelab services by entering in any services on your local network to the file data\homelab_services.json. I have provided some examples that I use in my homelab for probe endpoint health.
 
@@ -63,6 +121,8 @@ Make a copy of .example_env to .env and enter any secret keys you would like to 
 
 ## Running Locally
 The docker compose file will run the unit tests automatically.
+
+
 
 ```bash
 docker compose build; docker compose up
