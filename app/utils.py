@@ -1,8 +1,9 @@
 import ipaddress
-import subprocess
-from fastapi import HTTPException
 import os
+import subprocess
 from dotenv import load_dotenv
+from fastapi import HTTPException
+
 
 load_dotenv() # loads those secret
 

@@ -1,11 +1,12 @@
-from app.main import app
-from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
-from app.utils import build_request_headers, validate_and_probe_subnet
+import os
+import pytest
 from dotenv import load_dotenv
 from fastapi import HTTPException
-import pytest
-import os
+from fastapi.testclient import TestClient
+from unittest.mock import MagicMock, patch
+from app.main import app
+from app.utils import build_request_headers, validate_and_probe_subnet
+
 
 load_dotenv() # loads those secretz
 
