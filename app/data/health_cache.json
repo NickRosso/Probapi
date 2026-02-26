@@ -1,0 +1,17 @@
+{
+    "timestamp": "2026-02-26T03:30:42.944519+00:00",
+    "services": {
+        "vaultwarden": {
+            "status": 200,
+            "content_length": 29
+        },
+        "traefik": {
+            "status": 401,
+            "content_length": 17
+        },
+        "Ubiquit Dream Machine SE": {
+            "status": 200,
+            "content_length": 2153
+        }
+    }
+}

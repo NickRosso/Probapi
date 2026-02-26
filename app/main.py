@@ -2,6 +2,8 @@ from fastapi import FastAPI, Query, HTTPException, UploadFile
 from fastapi import __version__ as fastapi_version
 from .utils import validate_and_probe_subnet, build_request_headers
 from dotenv import load_dotenv
+import asyncio
+import aiohttp
 import aiofiles
 import os
 import uvicorn
@@ -15,6 +17,9 @@ import json
 from pathlib import Path
 
 load_dotenv() # loads those secretz
+
+CACHE_PATH = os.getenv("CACHE_PATH")
+CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL")) #every 5 min poll services.
 
 app = FastAPI()
 start_time = datetime.datetime.now(datetime.UTC)
@@ -46,25 +51,37 @@ def index():
             }
         }
 
-@app.get("/probe/homelab_service_health",
-    summary="This endpoint makes requests to each of the configured defined in data/homelab_services.json.",
-    response_description="Responses from various service health endpoints."
-)
-def probe_homelab_service_health():
-    results = {} 
-    try:
-        with open("/code/app/data/homelab_services.json", "r") as file:
-            data = json.load(file)
-            services = data["services"]
+#Deprecated replaced with homelab_service_health remove me at some point
+# @app.get("/probe/homelab_service_health",
+#     summary="This endpoint makes requests to each of the configured defined in data/homelab_services.json.",
+#     response_description="Responses from various service health endpoints."
+# )
+# def probe_homelab_service_health():
+#     results = {} 
+#     try:
+#         with open("/code/app/data/homelab_services.json", "r") as file:
+#             data = json.load(file)
+#             services = data["services"]
 
-            for service in services:
-                headers = build_request_headers(service['headers'])
-                response = requests.get(service["URL"], verify=service["TLS"], headers=headers)
-                results[service["name"]] = response.text
+#             for service in services:
+#                 headers = build_request_headers(service['headers'])
+#                 response = requests.get(service["URL"], verify=service["TLS"], headers=headers)
+#                 results[service["name"]] = response.text
 
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"PossibleError loading homelab_services.json. File is missing or data is invalid JSON. Full trace: {e}")
-    return results
+#     except Exception as e:
+#         raise HTTPException(status_code=400, detail=f"PossibleError loading homelab_services.json. File is missing or data is invalid JSON. Full trace: {e}")
+#     return results
+
+
+@app.get("/probe/homelab_service_health")
+def get_cached_health():
+    if not os.path.exists(CACHE_PATH):
+        raise HTTPException(status_code=404, detail="No cached health data yet.")
+
+    with open(CACHE_PATH, "r") as cache:
+        return json.load(cache)
+
+
 
 @app.post("/probe/update_homelab_services",
     summary="This enpdoint accepts properly formatted JSON files to overwrite the homelab_services.json file.",
@@ -139,7 +156,7 @@ def probe_url(
 ):
 
     if not url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=400, detail="Error please provide the full URL of the web app to test. i.e. https://localhost")
+        raise HTTPException(status_code=400, detail=f"Error please provide the full URL of the web app to test. i.e. http://{os.getenv('APP_DNS')}:{os.getenv('PORT')}")
 
     
     responses = {}
@@ -184,3 +201,51 @@ if os.getenv("ENVIRONMENT") == "TEST":
         if response.status_code != 200:
             return HTTPException(status_code=500, detail=f" LLM error: {response.text}")
         return {"advice": response.json().get("response")}
+
+
+async def run_async_health_check():
+    try:
+        with open(os.getenv("CONFIG_PATH"), "r") as file:
+            services = json.load(file)["services"]
+    except Exception as e:
+        print(f"Error from healthcheck {e}")
+        return
+    
+    results = { 
+        "timestamp": datetime.datetime.now(datetime.UTC).isoformat(), 
+        "services": {}
+    }
+
+    async with aiohttp.ClientSession() as session:
+        for service in services:
+            try:
+                async with session.get(
+                    service["URL"],
+                    ssl=service["TLS"],
+                    headers=build_request_headers(service["headers"])
+                ) as resp:
+                    results["services"][service["name"]] = {
+                        "status": resp.status,
+                        "content_length": resp.content_length,
+                    }
+            except Exception as e:
+                results["services"][service["name"]] = {
+                    "error": str(e)
+                }
+
+    # saave results to cache
+    try:
+        with open(CACHE_PATH, "w") as cache:
+            json.dump(results, cache, indent=4)
+    except Exception as e:
+        print(f"[HealthCheck] Failed to write cache: {e}")
+
+
+@app.on_event("startup")
+async def start_health_check_loop():
+    async def loop():
+        while True:
+            await run_async_health_check()
+            await asyncio.sleep(CHECK_INTERVAL)
+    
+    asyncio.create_task(loop())
