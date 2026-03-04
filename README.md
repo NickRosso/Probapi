@@ -1,4 +1,4 @@
-# HomeLab Probe API
+# Probapi
 
 This is a small FastAPI project I built for experimenting with network probing inside my homelab. It started as a way to play with FastAPI, but it turned into a handy little tool for checking HTTP endpoints, scanning subnets, and more to come.
 
