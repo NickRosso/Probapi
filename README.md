@@ -1,19 +1,17 @@
 # Probapi
 
 This is a small FastAPI project I built for experimenting with network probing inside my homelab. It started as a way to play with FastAPI, but it turned into a handy little tool for checking HTTP endpoints, scanning subnets, and more to come.
-
 It’s useful when you don’t need Prometheus‑level complexity but still want something that can ping your stuff, log failures, and generally let you know when things go sideways.
----
 
+---
+## Pre-reqs
+Docker installed... duh
 
 ## Env File
 Copy .example_env to .env and fill in your values.
 Environment variables referenced in homelab_services.json must match the names in key in the .env. If they don’t, any authentication bearer tokens etc wont work and you’ll spend 20 minutes debugging something that was spelled wrong.
 
 ## Running Locally
-The docker compose file will run the unit tests automatically.
-
-
 
 ```bash
 docker compose build
@@ -21,8 +19,6 @@ docker compose up
 ```
 
 ---
-## Pre-reqs
-Docker installed... duh
 
 ## Features
 
