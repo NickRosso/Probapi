@@ -5,10 +5,11 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 import tempfile
 import csv
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock, patch
 import json
-from app.main import app
+from app.main import app, health_check_loop, CHECK_INTERVAL
 from app.utils import build_request_headers, validate_and_probe_subnet
+import asyncio
 
 
 load_dotenv() # loads those secretz
@@ -63,6 +64,25 @@ def test_index():
     assert isinstance(system["memory"], dict)
     assert isinstance(system["disk_usage"], dict)
 
+
+
+@pytest.mark.asyncio
+async def test_health_check_loop_runs_once_and_sleeps():
+    # Mock run_async_health_check so it doesn't actually run
+    with patch("app.main.run_async_health_check", new=AsyncMock()) as mock_check, \
+         patch("asyncio.sleep", new=AsyncMock(side_effect=asyncio.CancelledError)) as mock_sleep:
+
+        # Run the loop, expecting it to cancel after first sleep
+        with pytest.raises(asyncio.CancelledError):
+            await health_check_loop()
+
+        # Ensure health check was called once
+        mock_check.assert_awaited_once()
+
+        # Ensure sleep was called with CHECK_INTERVAL
+        mock_sleep.assert_awaited_once_with(CHECK_INTERVAL)
+
+
 def test_probe_url_required_query_parameters():
     response = client.get("/probe/url")
     data = response.json()
@@ -70,9 +90,7 @@ def test_probe_url_required_query_parameters():
     assert isinstance(data["detail"], list) # if request does not contain required parameters 
     assert len(data["detail"])== 2 #currently there are two required query parameters
 
-# def test_probe_homelab_service_health():
-#     response = client.get("/probe/homelab_service_health")
-#     assert response.status_code == 200
+
 
 @patch("app.main.time.sleep")
 @patch("app.main.requests.get")
