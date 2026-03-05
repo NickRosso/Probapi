@@ -7,11 +7,11 @@ It’s useful when you don’t need Prometheus‑level complexity but still want
 ## Pre-reqs
 Docker installed... duh
 
-## Env File
+## Update Env File
 Copy .example_env to .env and fill in your values.
 Environment variables referenced in homelab_services.json must match the names in key in the .env. If they don’t, any authentication bearer tokens etc wont work and you’ll spend 20 minutes debugging something that was spelled wrong.
 
-## Running Locally
+## Startup
 
 ```bash
 docker compose build
