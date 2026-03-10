@@ -5,13 +5,12 @@ import os
 import platform
 import socket
 import time
-from pathlib import Path
 import aiofiles
 import aiohttp
 import psutil
-import requests
 import uvicorn
 import csv
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, UploadFile
 from fastapi import __version__ as fastapi_version
@@ -222,40 +221,38 @@ async def update_services(file: UploadFile):
         "Filename": file.filename,
         "backup_created": backup_path}
 
-@app.get("/probe/url",
-    summary="This endpoint probes the provided web app given with GET requests.",
-    response_description="A dictionary of requests detailing request information and results. The key is the" \
-    " request counter and the value is the response information."
-)
-def probe_url(
-    count: int = Query(..., description="Number of Requests to Send."),
-    url: str = Query(..., description="Full URL including http:// or https://"),
-    ssl: bool = Query(False, description="Verify SSL Certificate"),
-    delay: int = Query(15, description="Time in seconds between requests"),
-    back_off: int = Query(5, description="Increases time between requests each time there is a error")
-):
 
+
+@app.get("/probe/url")
+async def probe_url(
+    count: int = Query(...),
+    url: str = Query(...),
+    ssl: bool = Query(False),
+    delay: int = Query(15),
+    back_off: int = Query(5)
+):
     if not url.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail=f"Error please provide the full URL of the web app to test. i.e. http://{os.getenv('APP_DNS')}:{os.getenv('PORT')}")
 
-    
     responses = {}
-    print(f"Making {count} GET request(s)")
-    for counter in range(0, count):
-        response = requests.get(url, verify=ssl)
-        responses[counter] = {
-            "Type": "GET", 
-            "URL": url,
-            "status": response.status_code, 
-            "content_length": len(response.content)
-        }
-        if not response.ok:
-            delay *= back_off # Increase delay by back_off
-            
-        time.sleep(delay)
+
+    async with httpx.AsyncClient(verify=ssl) as client:
+        for counter in range(count):
+            response = await client.get(url)
+            responses[counter] = {
+                "Type": "GET",
+                "URL": url,
+                "status": response.status_code,
+                "content_length": len(response.content)
+            }
+
+            if not response.is_success:
+                delay *= back_off
+
+            await asyncio.sleep(delay)
 
     return responses
-    
+
 @app.get("/probe/subnet",
     summary="This checks and does a ICMP ping on all hosts in a Class C subnet.",
     response_description="Returns all of the IPs that responded"

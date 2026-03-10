@@ -3,6 +3,7 @@ import pytest
 from dotenv import load_dotenv
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+import requests
 import tempfile
 import csv
 from unittest.mock import MagicMock, patch, AsyncMock, patch
@@ -92,38 +93,40 @@ def test_probe_url_required_query_parameters():
 
 
 
-@patch("app.main.time.sleep")
-@patch("app.main.requests.get")
-def test_probe_url_request_count(mock_get, mock_sleep):
-    #creating a mock object to mimick get request and time.sleep calls. 
-    # In the test we count the number of times they were called to check the underlying logic
-    mock_response = MagicMock()
-    mock_response.ok = False
+@pytest.mark.asyncio
+@patch("app.main.asyncio.sleep", new_callable=AsyncMock)
+@patch("app.main.httpx.AsyncClient.get", new_callable=AsyncMock)
+async def test_probe_url_request_count(mock_get, mock_sleep):
+    # Mock the async GET response
+    mock_response = AsyncMock()
+    mock_response.is_success = False
     mock_response.status_code = 500
     mock_response.content = b"error"
     mock_get.return_value = mock_response
 
+    # First request: count=2
     response = client.get("/probe/url", params={
         "count": 2,
         "url": f"http://{os.getenv('APP_DNS')}:8000",
-        "delay": 2, 
+        "delay": 2,
         "back_off": 3,
         "ssl": True
     })
 
     assert response.status_code == 200
-    assert mock_sleep.call_count == 2
-    
+    assert mock_sleep.await_count == 2
+
+    # Second request: count=10
     response = client.get("/probe/url", params={
         "count": 10,
         "url": f"http://{os.getenv('APP_DNS')}:{os.getenv('PORT')}",
-        "delay": 2, 
+        "delay": 2,
         "back_off": 3,
     })
 
     assert response.status_code == 200
-    #call_count should be total of count between the 2 requests
-    assert mock_sleep.call_count == 12
+    # Total sleeps = 2 (first call) + 10 (second call)
+    assert mock_sleep.await_count == 12
 
 
 def test_probe_url_missing_protocol_error():
